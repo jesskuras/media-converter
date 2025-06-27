@@ -23,50 +23,75 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Status = "idle" | "selected" | "converting" | "success" | "error";
+// By loading FFmpeg via <script> tags, we avoid Next.js build errors.
+// We declare the global types for TypeScript.
+declare global {
+  interface Window {
+    FFmpeg: any;
+    FFmpegUtil: any;
+  }
+}
+
+type Status = "loading" | "idle" | "selected" | "converting" | "success" | "error";
 
 export default function Converter() {
   const [file, setFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<Status>("loading");
   const [progress, setProgress] = useState(0);
   const [convertedUrl, setConvertedUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
   const ffmpegRef = useRef<any | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    const loadFfmpeg = async () => {
-      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-      const { toBlobURL } = await import('@ffmpeg/util');
-
-      const ffmpeg = new FFmpeg();
-      ffmpegRef.current = ffmpeg;
-      const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
+    const loadConverter = async () => {
+      setStatus("loading");
       try {
+        // Load scripts if they are not already present
+        if (!window.FFmpeg || !window.FFmpegUtil) {
+          await Promise.all([
+            new Promise<void>((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/util.js';
+              script.onload = () => resolve();
+              script.onerror = reject;
+              document.head.appendChild(script);
+            }),
+            new Promise<void>((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
+              script.onload = () => resolve();
+              script.onerror = reject;
+              document.head.appendChild(script);
+            })
+          ]);
+        }
+        
+        const { FFmpeg } = window.FFmpeg;
+        const { toBlobURL } = window.FFmpegUtil;
+        
+        const ffmpeg = new FFmpeg();
+        ffmpegRef.current = ffmpeg;
+        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
+        
         await ffmpeg.load({
-          coreURL: await toBlobURL(
-            `${baseURL}/ffmpeg-core.js`,
-            "text/javascript"
-          ),
-          wasmURL: await toBlobURL(
-            `${baseURL}/ffmpeg-core.wasm`,
-            "application/wasm"
-          ),
+          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
         });
-        setFfmpegLoaded(true);
+        
+        setStatus("idle");
       } catch (err) {
-        console.error(err);
+        console.error("Failed to load FFmpeg:", err);
         toast({
           variant: "destructive",
-          title: "Failed to load FFmpeg",
-          description: "Something went wrong. Please refresh and try again.",
+          title: "Failed to load converter",
+          description: "There was a problem setting up the converter. Please refresh the page.",
         });
         setStatus("error");
       }
     };
-    loadFfmpeg();
+    loadConverter();
   }, [toast]);
 
   const handleFileSelect = (selectedFile: File | null) => {
@@ -74,14 +99,15 @@ export default function Converter() {
       if (selectedFile.type === "video/webm") {
         setFile(selectedFile);
         setStatus("selected");
+        setConvertedUrl(null);
+        setProgress(0);
       } else {
         toast({
           variant: "destructive",
           title: "Invalid File Type",
           description: "Please upload a .webm file.",
         });
-        setStatus("error");
-        setTimeout(() => setStatus("idle"), 3000);
+        handleReset();
       }
     }
   };
@@ -108,11 +134,11 @@ export default function Converter() {
   };
 
   const handleConvertClick = async () => {
-    if (file && ffmpegLoaded && ffmpegRef.current) {
+    if (file && ffmpegRef.current && status === 'selected') {
       setStatus("converting");
       setProgress(0);
       const ffmpeg = ffmpegRef.current;
-      const { fetchFile } = await import('@ffmpeg/util');
+      const { fetchFile } = window.FFmpegUtil;
 
       ffmpeg.on("progress", ({ progress }: { progress: number }) => {
         setProgress(Math.round(progress * 100));
@@ -124,7 +150,7 @@ export default function Converter() {
         const data = await ffmpeg.readFile("output.mp4");
 
         const url = URL.createObjectURL(
-          new Blob([data], { type: "video/mp4" })
+          new Blob([(data as Uint8Array).buffer], { type: "video/mp4" })
         );
         setConvertedUrl(url);
         setStatus("success");
@@ -175,6 +201,7 @@ export default function Converter() {
         className="hidden"
         accept="video/webm"
         onChange={handleInputChange}
+        disabled={status !== 'idle'}
       />
     </div>
   );
@@ -214,22 +241,23 @@ export default function Converter() {
   const renderErrorState = () => (
     <div className="flex flex-col items-center text-center">
       <XCircle className="w-16 h-16 text-destructive mb-4" />
-      <p className="font-semibold text-destructive">Invalid File Type or Conversion Failed</p>
-      <p className="text-sm text-muted-foreground">Please try again with a valid .webm file.</p>
+      <p className="font-semibold text-destructive">An Error Occurred</p>
+      <p className="text-sm text-muted-foreground">Please refresh the page and try again.</p>
     </div>
+  );
+  
+  const renderLoadingState = () => (
+     <div className="flex flex-col items-center text-center">
+        <Loader2 className="w-16 h-16 text-primary mb-4 animate-spin" />
+        <p className="font-semibold">Loading Converter...</p>
+        <p className="text-sm text-muted-foreground">Please wait, this may take a moment.</p>
+      </div>
   );
 
   const renderContent = () => {
-    if (!ffmpegLoaded) {
-      return (
-        <div className="flex flex-col items-center text-center">
-          <Loader2 className="w-16 h-16 text-primary mb-4 animate-spin" />
-          <p className="font-semibold">Loading Converter...</p>
-          <p className="text-sm text-muted-foreground">Please wait, this may take a moment.</p>
-        </div>
-      );
-    }
     switch (status) {
+      case "loading":
+        return renderLoadingState();
       case "selected":
         return renderSelectedState();
       case "converting":
@@ -277,6 +305,12 @@ export default function Converter() {
             )}
           </div>
         );
+      case "error":
+        return (
+          <Button onClick={handleReset} className="w-full">
+              Try Again
+          </Button>
+        )
       default:
         return null;
     }
