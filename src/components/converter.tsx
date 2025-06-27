@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect, type ChangeEvent, type DragEvent } from "react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import {
   Card,
   CardContent,
@@ -34,13 +32,17 @@ export default function Converter() {
   const [convertedUrl, setConvertedUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
-  const ffmpegRef = useRef(new FFmpeg());
+  const ffmpegRef = useRef<any | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     const loadFfmpeg = async () => {
-      const ffmpeg = ffmpegRef.current;
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+      const { toBlobURL } = await import('@ffmpeg/util');
+
+      const ffmpeg = new FFmpeg();
+      ffmpegRef.current = ffmpeg;
       const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
       try {
         await ffmpeg.load({
@@ -106,12 +108,13 @@ export default function Converter() {
   };
 
   const handleConvertClick = async () => {
-    if (file && ffmpegLoaded) {
+    if (file && ffmpegLoaded && ffmpegRef.current) {
       setStatus("converting");
       setProgress(0);
       const ffmpeg = ffmpegRef.current;
+      const { fetchFile } = await import('@ffmpeg/util');
 
-      ffmpeg.on("progress", ({ progress }) => {
+      ffmpeg.on("progress", ({ progress }: { progress: number }) => {
         setProgress(Math.round(progress * 100));
       });
 
