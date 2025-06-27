@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, type ChangeEvent, type DragEvent } from "react";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import {
   Card,
   CardContent,
@@ -31,33 +33,39 @@ export default function Converter() {
   const [progress, setProgress] = useState(0);
   const [convertedUrl, setConvertedUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
+  const ffmpegRef = useRef(new FFmpeg());
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (status === "converting") {
-      setProgress(0);
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          const nextVal = prev + Math.floor(Math.random() * 5) + 1;
-          if (nextVal >= 100) {
-            clearInterval(interval);
-            setStatus("success");
-            const dummyBlob = new Blob(["Simulated MP4 content"], {
-              type: "video/mp4",
-            });
-            setConvertedUrl(URL.createObjectURL(dummyBlob));
-            return 100;
-          }
-          return nextVal;
+    const loadFfmpeg = async () => {
+      const ffmpeg = ffmpegRef.current;
+      const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+      try {
+        await ffmpeg.load({
+          coreURL: await toBlobURL(
+            `${baseURL}/ffmpeg-core.js`,
+            "text/javascript"
+          ),
+          wasmURL: await toBlobURL(
+            `${baseURL}/ffmpeg-core.wasm`,
+            "application/wasm"
+          ),
         });
-      }, 100);
-
-      return () => {
-        clearInterval(interval);
-      };
-    }
-  }, [status]);
+        setFfmpegLoaded(true);
+      } catch (err) {
+        console.error(err);
+        toast({
+          variant: "destructive",
+          title: "Failed to load FFmpeg",
+          description: "Something went wrong. Please refresh and try again.",
+        });
+        setStatus("error");
+      }
+    };
+    loadFfmpeg();
+  }, [toast]);
 
   const handleFileSelect = (selectedFile: File | null) => {
     if (selectedFile) {
@@ -71,7 +79,7 @@ export default function Converter() {
           description: "Please upload a .webm file.",
         });
         setStatus("error");
-        setTimeout(() => setStatus('idle'), 3000);
+        setTimeout(() => setStatus("idle"), 3000);
       }
     }
   };
@@ -97,9 +105,36 @@ export default function Converter() {
     }
   };
 
-  const handleConvertClick = () => {
-    if (file) {
+  const handleConvertClick = async () => {
+    if (file && ffmpegLoaded) {
       setStatus("converting");
+      setProgress(0);
+      const ffmpeg = ffmpegRef.current;
+
+      ffmpeg.on("progress", ({ progress }) => {
+        setProgress(Math.round(progress * 100));
+      });
+
+      try {
+        await ffmpeg.writeFile("input.webm", await fetchFile(file));
+        await ffmpeg.exec(["-i", "input.webm", "output.mp4"]);
+        const data = await ffmpeg.readFile("output.mp4");
+
+        const url = URL.createObjectURL(
+          new Blob([data], { type: "video/mp4" })
+        );
+        setConvertedUrl(url);
+        setStatus("success");
+      } catch (error) {
+        console.error(error);
+        toast({
+          variant: "destructive",
+          title: "Conversion Failed",
+          description: "An error occurred during conversion.",
+        });
+        setStatus("error");
+        setTimeout(() => setStatus("idle"), 3000);
+      }
     }
   };
 
@@ -174,14 +209,23 @@ export default function Converter() {
   );
   
   const renderErrorState = () => (
-      <div className="flex flex-col items-center text-center">
-        <XCircle className="w-16 h-16 text-destructive mb-4" />
-        <p className="font-semibold text-destructive">Invalid File Type</p>
-        <p className="text-sm text-muted-foreground">Please select a .webm file.</p>
-      </div>
+    <div className="flex flex-col items-center text-center">
+      <XCircle className="w-16 h-16 text-destructive mb-4" />
+      <p className="font-semibold text-destructive">Invalid File Type or Conversion Failed</p>
+      <p className="text-sm text-muted-foreground">Please try again with a valid .webm file.</p>
+    </div>
   );
 
   const renderContent = () => {
+    if (!ffmpegLoaded) {
+      return (
+        <div className="flex flex-col items-center text-center">
+          <Loader2 className="w-16 h-16 text-primary mb-4 animate-spin" />
+          <p className="font-semibold">Loading Converter...</p>
+          <p className="text-sm text-muted-foreground">Please wait, this may take a moment.</p>
+        </div>
+      );
+    }
     switch (status) {
       case "selected":
         return renderSelectedState();
