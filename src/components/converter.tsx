@@ -69,15 +69,13 @@ export default function Converter() {
         }
         
         const { FFmpeg } = window.FFmpeg;
-        const { toBlobURL } = window.FFmpegUtil;
         
         const ffmpeg = new FFmpeg();
         ffmpegRef.current = ffmpeg;
-        const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
         
+        // Load the single-file UMD core. This is simpler and more robust.
         await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+          coreURL: "https://unpkg.com/@ffmpeg/core/dist/umd/ffmpeg-core.js",
         });
         
         setStatus("idle");
