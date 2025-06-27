@@ -41,7 +41,7 @@ export default function Converter() {
   useEffect(() => {
     const loadFfmpeg = async () => {
       const ffmpeg = ffmpegRef.current;
-      const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
+      const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
       try {
         await ffmpeg.load({
           coreURL: await toBlobURL(
