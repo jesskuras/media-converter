@@ -58,8 +58,8 @@ export default function Converter() {
                 document.head.appendChild(script);
               });
             // Load scripts sequentially to respect dependencies
-            await loadScript("https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/util.js");
-            await loadScript("https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js");
+            await loadScript("https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/util.js");
+            await loadScript("https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js");
         }
         
         const { FFmpeg } = window.FFmpeg;
@@ -68,7 +68,7 @@ export default function Converter() {
         ffmpegRef.current = ffmpeg;
         
         await ffmpeg.load({
-          coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
+          coreURL: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
         });
         
         setStatus("idle");
