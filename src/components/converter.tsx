@@ -48,24 +48,18 @@ export default function Converter() {
     const loadConverter = async () => {
       setStatus("loading");
       try {
-        // Load scripts if they are not already present
         if (!window.FFmpeg || !window.FFmpegUtil) {
-          await Promise.all([
-            new Promise<void>((resolve, reject) => {
-              const script = document.createElement('script');
-              script.src = 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/util.js';
-              script.onload = () => resolve();
-              script.onerror = reject;
-              document.head.appendChild(script);
-            }),
-            new Promise<void>((resolve, reject) => {
-              const script = document.createElement('script');
-              script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
-              script.onload = () => resolve();
-              script.onerror = reject;
-              document.head.appendChild(script);
-            })
-          ]);
+            const loadScript = (src: string) =>
+              new Promise<void>((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = src;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+                document.head.appendChild(script);
+              });
+            // Load scripts sequentially to respect dependencies
+            await loadScript("https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/util.js");
+            await loadScript("https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js");
         }
         
         const { FFmpeg } = window.FFmpeg;
@@ -73,9 +67,8 @@ export default function Converter() {
         const ffmpeg = new FFmpeg();
         ffmpegRef.current = ffmpeg;
         
-        // Load the single-file UMD core. This is simpler and more robust.
         await ffmpeg.load({
-          coreURL: "https://unpkg.com/@ffmpeg/core/dist/umd/ffmpeg-core.js",
+          coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js",
         });
         
         setStatus("idle");
@@ -84,7 +77,7 @@ export default function Converter() {
         toast({
           variant: "destructive",
           title: "Failed to load converter",
-          description: "There was a problem setting up the converter. Please refresh the page.",
+          description: err instanceof Error ? err.message : "An unknown error occurred. Please refresh.",
         });
         setStatus("error");
       }
