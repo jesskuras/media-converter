@@ -1,0 +1,9 @@
+{
+  "[project]/src/components/converter.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/src/components/converter.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/_5cb6408a._.js",
+      "static/chunks/src_components_converter_tsx_1d83033a._.js"
+    ]
+  }
+}
